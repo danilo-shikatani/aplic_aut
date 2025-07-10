@@ -15,7 +15,6 @@ st.sidebar.info(
     "Estes são os nomes padrão baseados na sua imagem. Ajuste apenas se o layout do arquivo mudar."
 )
 
-# Nomes das colunas extraídos da sua imagem. O '\n' representa a quebra de linha no cabeçalho.
 coluna_data = st.sidebar.text_input("Coluna de Data", "DATA")
 coluna_iof = st.sidebar.text_input("Coluna de IOF", "IOF\nRetido")
 coluna_irrf = st.sidebar.text_input("Coluna de IRRF", "IRRF\nRetido")
@@ -36,30 +35,28 @@ if uploaded_files:
     if st.button("🚀 Gerar Lançamentos"):
         with st.spinner("Analisando extratos e aplicando regras..."):
             
-            # --- Leitura e Concatenação ---
             lista_dfs = []
             for file in uploaded_files:
                 try:
-                    # Tenta ler como Excel, que é mais comum para esses relatórios
-                    df = pd.read_excel(file)
-                except Exception:
-                    df = pd.read_csv(file, sep=';')
+                    # --- CORREÇÃO APLICADA AQUI ---
+                    # Adicionado header=5 para pular as linhas de título do arquivo
+                    df = pd.read_excel(file, header=5)
+                except Exception as e_excel:
+                    st.write(f"Falha ao ler como Excel ({e_excel}), tentando como CSV...")
+                    # Garante que o ponteiro do arquivo volte ao início para a nova tentativa de leitura
+                    file.seek(0)
+                    df = pd.read_csv(file, sep=';', header=5)
                 lista_dfs.append(df)
             
             df_origem = pd.concat(lista_dfs, ignore_index=True)
             st.success("Arquivos lidos e unidos com sucesso!")
 
-            # --- Limpeza Prévia ---
-            # Remove linhas onde a data é nula, que geralmente são totais ou cabeçalhos
+            # Limpeza Prévia
             df_origem.dropna(subset=[coluna_data], inplace=True)
-            # Converte a coluna de data para o formato correto
             df_origem[coluna_data] = pd.to_datetime(df_origem[coluna_data], errors='coerce')
 
-
-            # --- Lógica de Transformação por Coluna ---
+            # --- Lógica de Transformação por Coluna (sem alterações) ---
             lancamentos_finais = []
-
-            # Regras de Negócio
             regras = {
                 'IOF': {'coluna': coluna_iof, 'Natureza': '500513', 'Historico': 'IOF S/ RENDIMENTO', 'Custo': 'debito'},
                 'IRRF': {'coluna': coluna_irrf, 'Natureza': '700721', 'Historico': 'IR S/ RENDIMENTO', 'Custo': 'debito'},
@@ -69,22 +66,18 @@ if uploaded_files:
             for tipo, info in regras.items():
                 coluna_valor = info['coluna']
                 if coluna_valor in df_origem.columns:
-                    # Converte a coluna para numérico, tratando erros
                     df_origem[coluna_valor] = pd.to_numeric(df_origem[coluna_valor], errors='coerce')
-                    
-                    # Filtra apenas as linhas que têm valor válido (> 0) nesta coluna
                     df_temp = df_origem[df_origem[coluna_valor].fillna(0) > 0].copy()
                     
                     if not df_temp.empty:
                         st.write(f"✔️ Encontrados {len(df_temp)} lançamentos para {tipo}.")
-                        
                         df_temp['Natureza'] = info['Natureza']
                         df_temp['Historico'] = info['Historico']
                         df_temp['Valor'] = df_temp[coluna_valor]
 
                         if info['Custo'] == 'debito':
                             df_temp['C. Custo debito'] = '2101020400'
-                        else: # credito
+                        else:
                             df_temp['C. Custo credito'] = '2101020400'
                         
                         lancamentos_finais.append(df_temp)
@@ -97,7 +90,6 @@ if uploaded_files:
                 df_final = pd.concat(lancamentos_finais, ignore_index=True)
                 df_final.rename(columns={coluna_data: 'DT Movimento'}, inplace=True)
                 
-                # Define as colunas da tabela principal
                 colunas_finais_obrigatorias = [
                     'FILIAL', 'DT Movimento', 'Numerario', 'Tipo', 'Valor', 'Natureza',
                     'Banco', 'Agencia', 'Conta Banco', 'Num Cheque', 'Historico',
@@ -105,16 +97,13 @@ if uploaded_files:
                     'Cl Valor Deb', 'Cl Valor Crd'
                 ]
                 
-                # Adiciona colunas que não existem no original, preenchendo com nulo
                 for col in colunas_finais_obrigatorias:
                     if col not in df_final.columns:
                         df_final[col] = np.nan
                 
-                # Preenche os valores de Débito e Crédito com base na coluna 'Valor'
                 df_final['Cl Valor Deb'] = np.where(df_final['C. Custo debito'].notna(), df_final['Valor'], np.nan)
                 df_final['Cl Valor Crd'] = np.where(df_final['C. Custo credito'].notna(), df_final['Valor'], np.nan)
 
-                # Salva o resultado no estado da sessão
                 st.session_state['df_processado'] = df_final[colunas_finais_obrigatorias]
                 st.balloons()
                 st.success("Transformação concluída!")
