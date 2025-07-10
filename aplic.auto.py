@@ -5,8 +5,8 @@ import io
 
 # --- 1. CONFIGURAÇÃO DA PÁGINA E TÍTULO ---
 st.set_page_config(page_title="Consolidador Financeiro", layout="wide")
-st.title("🤖 Aplicativo de Transformação de Lançamentos Financeiros")
-st.markdown("Faça o upload dos extratos dos bancos para consolidar e criar os lançamentos para a tabela principal.")
+st.title("🤖 Aplicativo de Criação de Lançamentos Financeiros")
+st.markdown("Faça o upload dos extratos para gerar os lançamentos de IOF, IRRF e Rendimentos.")
 
 
 # --- 2. BARRA LATERAL PARA CONFIGURAÇÕES ---
@@ -16,14 +16,15 @@ st.sidebar.info(
     "aos cabeçalhos das colunas nos seus arquivos de origem."
 )
 
-# Usamos valores padrão para facilitar, mas o usuário pode alterar na tela
-coluna_descricao = st.sidebar.text_input("Nome da coluna com a descrição (IOF, IRRF, etc.)", "Histórico")
-coluna_valor = st.sidebar.text_input("Nome da coluna com os valores", "Valor Lançamento")
+# Novos campos para as colunas de valor específicas
+coluna_iof = st.sidebar.text_input("Nome da coluna de IOF", "IOF")
+coluna_irrf = st.sidebar.text_input("Nome da coluna de IRRF", "IRRF")
+coluna_rendimento = st.sidebar.text_input("Nome da coluna de Rendimento", "Rendimento Bruto")
 coluna_data = st.sidebar.text_input("Nome da coluna de data do movimento", "Data")
 
 
 # --- 3. ÁREA DE UPLOAD DOS ARQUIVOS ---
-st.header("📤 2. Upload dos Arquivos dos Bancos")
+st.header("📤 2. Upload dos Arquivos de Origem")
 uploaded_files = st.file_uploader(
     "Arraste e solte os 3 arquivos (CSV ou Excel) aqui",
     accept_multiple_files=True,
@@ -31,102 +32,89 @@ uploaded_files = st.file_uploader(
 )
 
 
-# --- 4. BOTÃO PARA PROCESSAR E LÓGICA DE TRANSFORMAÇÃO ---
+# --- 4. BOTÃO PARA PROCESSAR E NOVA LÓGICA DE TRANSFORMAÇÃO ---
 if uploaded_files:
-    st.info(f"{len(uploaded_files)} arquivo(s) carregado(s). Clique no botão abaixo para iniciar a transformação.")
-
-    if st.button("🚀 Processar Arquivos"):
-        with st.spinner("Mágica em andamento... Lendo e transformando os dados..."):
+    if st.button("🚀 Gerar Lançamentos"):
+        with st.spinner("Processando... Lendo arquivos e aplicando regras..."):
             
             # --- Lógica de Leitura e Concatenação ---
             lista_dfs = []
             for file in uploaded_files:
                 try:
-                    # Tenta ler como CSV, depois como Excel se falhar
-                    try:
-                        df = pd.read_csv(file, sep=';')
-                    except Exception:
-                        df = pd.read_excel(file)
-                    lista_dfs.append(df)
-                except Exception as e:
-                    st.error(f"Erro ao ler o arquivo {file.name}: {e}")
+                    df = pd.read_csv(file, sep=';')
+                except Exception:
+                    df = pd.read_excel(file)
+                lista_dfs.append(df)
             
-            if not lista_dfs:
-                st.error("Nenhum arquivo pôde ser lido. Verifique o formato.")
-            else:
-                df_origem = pd.concat(lista_dfs, ignore_index=True)
-                st.success("Arquivos lidos e unidos com sucesso!")
+            df_origem = pd.concat(lista_dfs, ignore_index=True)
+            st.success("Arquivos lidos e unidos com sucesso!")
 
-                # --- Lógica de Transformação (a mesma do script anterior) ---
-                df_origem[coluna_descricao] = df_origem[coluna_descricao].astype(str)
+            # --- Lógica de Transformação por Coluna ---
+            lancamentos_finais = []
 
-                # Filtra cada tipo de lançamento
-                df_iof = df_origem[df_origem[coluna_descricao].str.contains('IOF', case=False, na=False)].copy()
-                df_irrf = df_origem[df_origem[coluna_descricao].str.contains('IRRF|I.R.', case=False, na=False)].copy()
-                df_rendimento = df_origem[df_origem[coluna_descricao].str.contains('RENDIMENTO|APLICACAO', case=False, na=False)].copy()
-
-                # Dicionário de regras
-                REGRAS = {
-                    'IOF': {'df': df_iof, 'Natureza': '500513', 'Historico': 'IOF S/ RENDIMENTO', 'Custo': 'debito'},
-                    'IRRF': {'df': df_irrf, 'Natureza': '700721', 'Historico': 'IR S/ RENDIMENTO', 'Custo': 'debito'},
-                    'RENDIMENTO': {'df': df_rendimento, 'Natureza': '700713', 'Historico': 'REND S/ APLICAÇAO', 'Custo': 'credito'}
-                }
-
-                lancamentos_processados = []
-
-                for tipo, info in REGRAS.items():
-                    df_temp = info['df']
+            # Regras de Negócio
+            regras = {
+                'IOF': {'coluna': coluna_iof, 'Natureza': '500513', 'Historico': 'IOF S/ RENDIMENTO', 'Custo': 'debito'},
+                'IRRF': {'coluna': coluna_irrf, 'Natureza': '700721', 'Historico': 'IR S/ RENDIMENTO', 'Custo': 'debito'},
+                'RENDIMENTO': {'coluna': coluna_rendimento, 'Natureza': '700713', 'Historico': 'REND S/ APLICAÇAO', 'Custo': 'credito'}
+            }
+            
+            for tipo, info in regras.items():
+                coluna_valor = info['coluna']
+                # Verifica se a coluna de valor existe no dataframe
+                if coluna_valor in df_origem.columns:
+                    # Filtra apenas as linhas que têm valor > 0 nesta coluna
+                    df_temp = df_origem[pd.to_numeric(df_origem[coluna_valor], errors='coerce').fillna(0) > 0].copy()
+                    
                     if not df_temp.empty:
-                        st.write(f"✔️ Encontrados {len(df_temp)} lançamentos de {tipo}.")
+                        st.write(f"✔️ Encontrados {len(df_temp)} lançamentos para {tipo}.")
+                        
+                        # Preenche as colunas com base nas regras
                         df_temp['Natureza'] = info['Natureza']
                         df_temp['Historico'] = info['Historico']
+                        df_temp['Valor'] = pd.to_numeric(df_temp[coluna_valor], errors='coerce')
+
                         if info['Custo'] == 'debito':
                             df_temp['C. Custo debito'] = '2101020400'
                             df_temp['C. Custo credito'] = np.nan
-                            df_temp['Cl Valor Deb'] = df_temp[coluna_valor]
-                            df_temp['Cl Valor Crd'] = np.nan
                         else: # credito
                             df_temp['C. Custo debito'] = np.nan
                             df_temp['C. Custo credito'] = '2101020400'
-                            df_temp['Cl Valor Deb'] = np.nan
-                            df_temp['Cl Valor Crd'] = df_temp[coluna_valor]
-                        lancamentos_processados.append(df_temp)
-                
-                if not lancamentos_processados:
-                    st.warning("Nenhum lançamento de IOF, IRRF ou Rendimento foi encontrado nos arquivos.")
+                        
+                        lancamentos_finais.append(df_temp)
                 else:
-                    df_final = pd.concat(lancamentos_processados, ignore_index=True)
-                    df_final.rename(columns={coluna_data: 'DT Movimento', coluna_valor: 'Valor'}, inplace=True)
-                    df_final['DT Movimento'] = pd.to_datetime(df_final['DT Movimento'], dayfirst=True, errors='coerce')
+                    st.warning(f"Aviso: A coluna '{coluna_valor}' não foi encontrada ou não possui valores válidos.")
 
-                    # Garante que todas as colunas da tabela principal existam
-                    colunas_finais_obrigatorias = [
-                        'FILIAL', 'DT Movimento', 'Numerario', 'Tipo', 'Valor', 'Natureza',
-                        'Banco', 'Agencia', 'Conta Banco', 'Num Cheque', 'Historico',
-                        'C. Custo debito', 'C. Custo credito', 'Item Debito', 'Item Credito',
-                        'Cl Valor Deb', 'Cl Valor Crd'
-                    ]
-                    for col in colunas_finais_obrigatorias:
-                        if col not in df_final.columns:
-                            df_final[col] = np.nan
+            if not lancamentos_finais:
+                st.warning("Nenhum lançamento de IOF, IRRF ou Rendimento foi encontrado nos arquivos com base nas colunas especificadas.")
+            else:
+                df_final = pd.concat(lancamentos_finais, ignore_index=True)
+                df_final.rename(columns={coluna_data: 'DT Movimento'}, inplace=True)
+                df_final['DT Movimento'] = pd.to_datetime(df_final['DT Movimento'], dayfirst=True, errors='coerce')
+                
+                # Garante que todas as colunas da tabela principal existam
+                colunas_finais_obrigatorias = [
+                    'FILIAL', 'DT Movimento', 'Numerario', 'Tipo', 'Valor', 'Natureza',
+                    'Banco', 'Agencia', 'Conta Banco', 'Num Cheque', 'Historico',
+                    'C. Custo debito', 'C. Custo credito', 'Item Debito', 'Item Credito',
+                    'Cl Valor Deb', 'Cl Valor Crd'
+                ]
+                for col in colunas_finais_obrigatorias:
+                    if col not in df_final.columns:
+                        df_final[col] = np.nan
 
-                    # Salva o resultado no estado da sessão para ser usado pelo botão de download
-                    st.session_state['df_processado'] = df_final[colunas_finais_obrigatorias]
-
-                    st.balloons()
-                    st.success("Transformação concluída com sucesso!")
+                st.session_state['df_processado'] = df_final[colunas_finais_obrigatorias]
+                st.balloons()
+                st.success("Transformação concluída com sucesso!")
 
 
 # --- 5. EXIBIÇÃO DO RESULTADO E BOTÃO DE DOWNLOAD ---
-
-# Verifica se o dataframe processado existe no estado da sessão
 if 'df_processado' in st.session_state:
     st.header("📊 3. Resultado da Transformação")
     df_resultado = st.session_state['df_processado']
     st.write(f"Total de {len(df_resultado)} lançamentos gerados para a tabela principal.")
     st.dataframe(df_resultado)
 
-    # Converte o dataframe para CSV em memória para o download
     @st.cache_data
     def converter_df_para_csv(df):
         return df.to_csv(index=False, sep=';', date_format='%d/%m/%Y').encode('utf-8')
