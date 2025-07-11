@@ -9,11 +9,6 @@ st.set_page_config(page_title="Consolidador de Extratos", layout="wide")
 st.title("🤖 Aplicativo de Lançamentos de Aplicações Financeiras")
 st.markdown("Faça o upload dos extratos para gerar os lançamentos contábeis.")
 
-# --- 2. BARRA LATERAL PARA CONFIGURAÇÕES ---
-st.sidebar.header("⚙️ 1. Informações do Lançamento")
-filial_input = st.sidebar.text_input("Nome da Filial", "CORPOREOS - SERVICOS 0001-98")
-banco_input = st.sidebar.text_input("Nome do Banco", "BANCO ITAU")
-st.sidebar.info("A Agência e a Conta serão extraídas automaticamente do arquivo.")
 
 # Nomes das colunas que vamos procurar no arquivo
 coluna_data = "DATA"
