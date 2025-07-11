@@ -84,7 +84,7 @@ if uploaded_files:
             regras = {
                 'IOF': {'coluna': coluna_iof, 'Natureza': '500513', 'Numerario': 'M1', 'Tipo': 'P', 'Historico': 'IOF S/ RENDIMENTO', 'Custo': 'debito'},
                 'IRRF': {'coluna': coluna_irrf, 'Natureza': '700721', 'Numerario': 'M1', 'Tipo': 'P', 'Historico': 'IR S/ RENDIMENTO', 'Custo': 'debito'},
-                'RENDIMENTO': {'coluna': coluna_rendimento, 'Natureza': '700713', 'Numerario': 'M1', 'Tipo': 'R' 'Historico': 'REND S/ APLICAÇAO', 'Custo': 'credito'}
+                'RENDIMENTO': {'coluna': coluna_rendimento, 'Natureza': '700713', 'Numerario': 'M1', 'Tipo': 'R', 'Historico': 'REND S/ APLICAÇAO', 'Custo': 'credito'}
             }
             
             for tipo, info in regras.items():
