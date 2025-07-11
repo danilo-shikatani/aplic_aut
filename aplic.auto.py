@@ -82,9 +82,9 @@ if uploaded_files:
 
             lancamentos_finais = []
             regras = {
-                'IOF': {'coluna': coluna_iof, 'Natureza': '500513', 'Numerario': 'M1', 'Historico': 'IOF S/ RENDIMENTO', 'Custo': 'debito'},
-                'IRRF': {'coluna': coluna_irrf, 'Natureza': '700721', 'Numerario': 'M1', 'Historico': 'IR S/ RENDIMENTO', 'Custo': 'debito'},
-                'RENDIMENTO': {'coluna': coluna_rendimento, 'Natureza': '700713', 'Numerario': 'M1', 'Historico': 'REND S/ APLICAÇAO', 'Custo': 'credito'}
+                'IOF': {'coluna': coluna_iof, 'Natureza': '500513', 'Numerario': 'M1', 'Tipo': 'P', 'Historico': 'IOF S/ RENDIMENTO', 'Custo': 'debito'},
+                'IRRF': {'coluna': coluna_irrf, 'Natureza': '700721', 'Numerario': 'M1', 'Tipo': 'P', 'Historico': 'IR S/ RENDIMENTO', 'Custo': 'debito'},
+                'RENDIMENTO': {'coluna': coluna_rendimento, 'Natureza': '700713', 'Numerario': 'M1', 'Tipo': 'R' 'Historico': 'REND S/ APLICAÇAO', 'Custo': 'credito'}
             }
             
             for tipo, info in regras.items():
@@ -98,6 +98,7 @@ if uploaded_files:
                         df_temp['Natureza'] = info['Natureza']
                         df_temp['Historico'] = info['Historico']
                         df_temp['Numerario'] = info['Numerario']
+                        df_temp['Tipo'] = info['Tipo']
                         df_temp['Valor'] = df_temp[coluna_valor_origem]
                         if info['Custo'] == 'debito':
                             df_temp['C. Custo debito'] = '2101020400'
