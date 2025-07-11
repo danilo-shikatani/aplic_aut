@@ -6,8 +6,8 @@ import re
 
 # --- 1. CONFIGURAÇÃO DA PÁGINA E TÍTULO ---
 st.set_page_config(page_title="Consolidador de Extratos", layout="wide")
-st.title("🤖 Aplicativo de Lançamentos de Aplicações Financeiras")
-st.markdown("Faça o upload dos extratos para gerar os lançamentos contábeis.")
+st.title("🤖 Aplicativo de Lançamentos de Movimentações Aplicações Financeiras Automaticas")
+st.markdown("Faça o upload dos extratos detalhados para gerar o arquivo.")
 
 # --- 2. BARRA LATERAL PARA CONFIGURAÇÕES ---
 st.sidebar.header("⚙️ 1. Informações do Lançamento")
