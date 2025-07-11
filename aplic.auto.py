@@ -95,7 +95,7 @@ if uploaded_files:
                     df_temp = df_completo[df_completo[coluna_valor_origem].fillna(0) > 0].copy()
                     
                     if not df_temp.empty:
-                        df_temp['Filial'] = '0101'
+                        df_temp['FILIAL'] = '0101'
                         df_temp['Banco'] = '341'
                         df_temp['Natureza'] = info['Natureza']
                         df_temp['Historico'] = info['Historico']
