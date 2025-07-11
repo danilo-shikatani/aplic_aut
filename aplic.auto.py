@@ -2,22 +2,32 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import io
+import re
 
 # --- 1. CONFIGURAÇÃO DA PÁGINA E TÍTULO ---
 st.set_page_config(page_title="Consolidador de Extratos", layout="wide")
 st.title("🤖 Aplicativo de Lançamentos de Aplicações Financeiras")
-st.markdown("Faça o upload dos extratos em formato CSV para gerar os lançamentos contábeis.")
+st.markdown("Faça o upload dos extratos para gerar os lançamentos contábeis.")
 
-# --- 2. BARRA LATERAL PARA CONFIGURAÇÕES (Automático) ---
-st.sidebar.header("⚙️ Nomes das Colunas em Análise")
+
+# --- 2. BARRA LATERAL PARA CONFIGURAÇÕES ---
+st.sidebar.header("⚙️ 1. Informações do Lançamento")
+
+# --- NOVOS CAMPOS PARA DIGITAR ---
+filial_input = st.sidebar.text_input("Nome da Filial", "CORPOREOS - SERVICOS 0001-98")
+banco_input = st.sidebar.text_input("Nome do Banco", "BANCO ITAU")
+# --- FIM DOS NOVOS CAMPOS ---
+
+st.sidebar.info(
+    "Os nomes das colunas de valor (IOF, IRRF, etc.) são lidos automaticamente do arquivo."
+)
+
+# Nomes das colunas que vamos procurar no arquivo
 coluna_data = "DATA"
 coluna_iof = "IOF_Retido"
 coluna_irrf = "IRRF_Retido"
 coluna_rendimento = "Rendimento_Pago_Bruto"
-st.sidebar.markdown(f"**Coluna de Data:** `{coluna_data}`")
-st.sidebar.markdown(f"**Coluna de IOF:** `{coluna_iof}`")
-st.sidebar.markdown(f"**Coluna de IRRF:** `{coluna_irrf}`")
-st.sidebar.markdown(f"**Coluna de Rendimento:** `{coluna_rendimento}`")
+
 
 # --- 3. ÁREA DE UPLOAD DOS ARQUIVOS ---
 st.header("📤 2. Faça o Upload dos Extratos CSV")
@@ -27,48 +37,69 @@ uploaded_files = st.file_uploader(
     type=['csv']
 )
 
+
 # --- 4. BOTÃO PARA PROCESSAR E LÓGICA DE TRANSFORMAÇÃO ---
 if uploaded_files:
     if st.button("🚀 Gerar Lançamentos"):
         with st.spinner("Analisando extratos e aplicando regras..."):
             
-            lista_dfs = []
-            novos_nomes_colunas = [
-                "DATA", "APLICACOES", "Valor_Principal_Resgatado", "Valor_Bruto_Resgatado", 
-                "IOF_Retido", "IRRF_Retido", "Valor_Liquido_Resgatado", "Rendimento_Pago_Bruto",
-                "Rendimento_Pago_Liquido", "Saldo_Principal", "POSICAO_Saldo_Bruto", "POSICAO_IOF",
-                "POSICAO_IRRF", "POSICAO_Saldo_Liquido"
-            ]
+            lista_dfs_processados = []
 
             for file in uploaded_files:
-                try:
-                    df_temp = pd.read_csv(
-                        file, sep=';', encoding='utf-8-sig', header=None,
-                        skiprows=9, skipfooter=3, engine='python'
-                    )
-                    
-                    # --- CORREÇÃO PRINCIPAL (NOVA LINHA) ---
-                    # Remove a primeira coluna, que está vazia por causa do ';' no início da linha
-                    if not df_temp.empty:
-                        df_temp = df_temp.drop(columns=df_temp.columns[0])
-                    # --- FIM DA CORREÇÃO ---
+                st.write(f"--- Processando arquivo: {file.name} ---")
+                
+                # Volta o ponteiro do arquivo para o início para garantir a leitura
+                file.seek(0)
+                # Decodifica o arquivo para ler como texto
+                content = file.getvalue().decode('utf-8')
+                
+                # --- LÓGICA PARA EXTRAIR AGÊNCIA E CONTA ---
+                agencia_extraida = None
+                conta_extraida = None
+                for line in content.splitlines():
+                    if "agência/conta:" in line.lower():
+                        # Usamos expressão regular para encontrar o padrão 'XXXX-XXXX-X'
+                        match = re.search(r'(\d+-\d+-\d+|\d+-\d+)', line)
+                        if match:
+                            partes = match.group(0).split('-')
+                            agencia_extraida = partes[0]
+                            # Remove o hífen da conta
+                            conta_extraida = "".join(partes[1:])
+                            st.write(f"✔️ Agência encontrada: **{agencia_extraida}** | Conta encontrada: **{conta_extraida}**")
+                            break # Para a busca após encontrar
 
-                    df_temp = df_temp.iloc[:, :len(novos_nomes_colunas)]
-                    df_temp.columns = novos_nomes_colunas
-                    lista_dfs.append(df_temp)
-                except Exception as e:
-                    st.error(f"Erro ao ler o arquivo {file.name}: {e}")
+                # --- Lógica de Leitura da Tabela ---
+                novos_nomes_colunas = [
+                    "DATA", "APLICACOES", "Valor_Principal_Resgatado", "Valor_Bruto_Resgatado", 
+                    "IOF_Retido", "IRRF_Retido", "Valor_Liquido_Resgatado", "Rendimento_Pago_Bruto",
+                    "Rendimento_Pago_Liquido", "Saldo_Principal", "POSICAO_Saldo_Bruto", "POSICAO_IOF",
+                    "POSICAO_IRRF", "POSICAO_Saldo_Liquido"
+                ]
+                
+                # Usa o conteúdo em memória para ler o CSV
+                data_io = io.StringIO(content)
+                df_origem = pd.read_csv(
+                    data_io, sep=';', encoding='utf-8-sig', header=None,
+                    skiprows=9, skipfooter=3, engine='python'
+                )
+                df_origem = df_origem.drop(columns=df_origem.columns[0])
+                df_origem = df_origem.iloc[:, :len(novos_nomes_colunas)]
+                df_origem.columns = novos_nomes_colunas
+                
+                # Adiciona as colunas extraídas e digitadas ao dataframe
+                df_origem['FILIAL'] = filial_input
+                df_origem['Banco'] = banco_input
+                df_origem['Agencia'] = agencia_extraida
+                df_origem['Conta Banco'] = conta_extraida
 
-            if not lista_dfs:
-                st.error("Nenhum arquivo pôde ser lido. Verifique o formato.")
-                st.stop()
+                lista_dfs_processados.append(df_origem)
 
-            df_origem = pd.concat(lista_dfs, ignore_index=True)
-            st.success("Arquivos lidos e colunas alinhadas com sucesso!")
+            df_completo = pd.concat(lista_dfs_processados, ignore_index=True)
+            st.success("Arquivos lidos e dados de cabeçalho extraídos com sucesso!")
 
-            # (O resto do código de transformação e geração de resultado continua o mesmo)
-            df_origem.dropna(subset=[coluna_data], inplace=True)
-            df_origem[coluna_data] = pd.to_datetime(df_origem[coluna_data], errors='coerce')
+            # --- Lógica de Transformação por Coluna ---
+            df_completo.dropna(subset=[coluna_data], inplace=True)
+            df_completo[coluna_data] = pd.to_datetime(df_completo[coluna_data], dayfirst=True, errors='coerce')
 
             lancamentos_finais = []
             regras = {
@@ -79,13 +110,12 @@ if uploaded_files:
             
             for tipo, info in regras.items():
                 coluna_valor_origem = info['coluna']
-                if coluna_valor_origem in df_origem.columns:
-                    df_origem[coluna_valor_origem] = df_origem[coluna_valor_origem].astype(str).str.replace('.', '', regex=False).str.replace(',', '.', regex=False)
-                    df_origem[coluna_valor_origem] = pd.to_numeric(df_origem[coluna_valor_origem], errors='coerce')
-                    df_temp = df_origem[df_origem[coluna_valor_origem].fillna(0) > 0].copy()
+                if coluna_valor_origem in df_completo.columns:
+                    df_completo[coluna_valor_origem] = df_completo[coluna_valor_origem].astype(str).str.replace('.', '', regex=False).str.replace(',', '.', regex=False)
+                    df_completo[coluna_valor_origem] = pd.to_numeric(df_completo[coluna_valor_origem], errors='coerce')
+                    df_temp = df_completo[df_completo[coluna_valor_origem].fillna(0) > 0].copy()
                     
                     if not df_temp.empty:
-                        st.write(f"✔️ Encontrados {len(df_temp)} lançamentos para {tipo}.")
                         df_temp['Natureza'] = info['Natureza']
                         df_temp['Historico'] = info['Historico']
                         df_temp['Valor'] = df_temp[coluna_valor_origem]
@@ -95,7 +125,9 @@ if uploaded_files:
                             df_temp['C. Custo credito'] = '2101020400'
                         lancamentos_finais.append(df_temp)
 
-            if lancamentos_finais:
+            if not lancamentos_finais:
+                st.warning("Nenhum lançamento de IOF, IRRF ou Rendimento foi encontrado nos arquivos.")
+            else:
                 df_final = pd.concat(lancamentos_finais, ignore_index=True)
                 df_final.rename(columns={coluna_data: 'DT Movimento'}, inplace=True)
                 
@@ -112,8 +144,7 @@ if uploaded_files:
                 st.session_state['df_processado'] = df_final[colunas_finais_obrigatorias]
                 st.balloons()
                 st.success("Transformação concluída!")
-            else:
-                st.warning("Nenhum lançamento de IOF, IRRF ou Rendimento foi encontrado após a limpeza.")
+
 
 # --- 5. EXIBIÇÃO DO RESULTADO E BOTÃO DE DOWNLOAD ---
 if 'df_processado' in st.session_state:
