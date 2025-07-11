@@ -31,11 +31,11 @@ if uploaded_files:
     for file in uploaded_files:
         try:
             # Tenta ler como Excel, pulando as 5 primeiras linhas
-            df_temp = pd.read_excel(file, header=5)
+            df_temp = pd.read_excel(file, header=6)
             lista_dfs.append(df_temp)
         except Exception:
             file.seek(0) # Volta ao início do arquivo para a nova tentativa
-            df_temp = pd.read_csv(file, sep=';', header=5)
+            df_temp = pd.read_csv(file, sep=';', header=6)
             lista_dfs.append(df_temp)
 
     df_origem = pd.concat(lista_dfs, ignore_index=True)
